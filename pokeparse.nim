@@ -20,20 +20,19 @@ type
   RecupError = object of CatchableError
 
 type
-  Tier = enum
-    Illegal, LC, NFE, PU, PrPU = "(PU)", RU, OU, NUBL, UU, PUBL, NU, RUBL, Uber, UUBL, AG, CAPLC = "CAP LC", CAP, CAPNFE = "CAP NFE"
-
-type
   Pokemon* = object of RootObj
     nom : string
-    tier : Tier
+    tier : string
 
-proc tier* (p : Pokemon) : Tier = p.tier
+proc tier* (p : Pokemon) : string = p.tier
 proc nom* (p : Pokemon) : string = p.nom
 
 proc log(l_type : LogType, contenu : string) = 
   ## Permet de logger des infos ou erreurs
-  echo contenu
+  case l_type
+    of LogType.Error: stdout.styledWriteLine(fgRed, contenu & "\n")
+    of LogType.Info : stdout.styledWriteLine(fgYellow, contenu & "\n")
+    else : echo contenu
 
 proc getPkdx() : auto = 
   ## Retreives the json, parses it and returns a seq of Pokemon objects 
@@ -41,24 +40,18 @@ proc getPkdx() : auto =
   let client = newHttpClient()
   var contenu : string
   try:
-    # contenu = client.getContent("https://pokemonshowdown.com/data/pokedex.json")
-    contenu = readfile("pokedex.json")
-  except:
-    raise newException(RecupError, "Erreur lors de la récupération du json")
+    contenu = client.getContent("https://play.pokemonshowdown.com/data/pokedex.json")
+  except CatchableError as e:
+    raise newException(RecupError, &"Erreur lors de la récupération du json : {e.msg}")
   finally:
     client.close()
   let parsed_content = parseJson(contenu)
 
-  # On récupère toutes les clés pour itérer dessus
-  let cles = collect(newSeq):
-    for k in parsed_content.keys:
-      k
-
-  # On crée le dico, on ignore les pokemons sans tier
+  # On crée la liste de pokémons
   result = collect:
-    for e in cles:
+    for e in parsed_content.keys: 
       if parsed_content[e].hasKey("tier"):
-        Pokemon(nom : parsed_content[e]["name"].getStr(), tier : parseEnum[Tier](parsed_content[e]["tier"].getStr()))
+        Pokemon(nom : parsed_content[e]["name"].getStr(), tier : parsed_content[e]["tier"].getStr())
 
 
 proc getByTier(liste_pk : openArray[Pokemon], tier: string): auto =
@@ -66,13 +59,13 @@ proc getByTier(liste_pk : openArray[Pokemon], tier: string): auto =
   # On crée un openarray qui ne contient que les poké du tier choisi
   result = collect:
     for p in liste_pk:
-      if p.tier == parseEnum[Tier](tier):
-        p
+      if p.tier == tier:
+        p 
 
 proc recupRand(liste_pk : openArray[Pokemon], nombre : int): auto = 
-  ## Retourne un openArray de nombre pokémons choisis au hasard dans la liste liste_pk
+  ## Retourne un openAr ray de nombre pokémons choisis au hasard dans la liste liste_pk
   result = collect:
-    for i in 1..nombre:
+    for i in 1..nombre: 
        liste_pk.sample()
 
 ##################################
@@ -89,44 +82,35 @@ const splash = """  _____      _        _____
                                                """
 const prompt_tier = """Entrez un tier (Illegal, LC, NFE, PU, (PU), RU, OU, NUBL, UU, PUBL, NU, RUBL, Uber, UUBL, AG,CAP LC, CAP, CAP NFE) (q pour quitter) 
 =>  """
-const prompt_nb = """Entrez le nombre de pokémons à récupérer 
-=> """
 
 # On affiche quelques infos
 echo splash
-# On charge le pokedex
+# On charge la loste de pokemons
 let pokedex = getPkdx()
-
-# On crée une map avec pour clé le Tier et pour valeur la liste de Pokemon
-let map_pkdx = collect:
-  for e in Tier.items:
-    {$e : pokedex.getByTier($e)}
 
 # Boucle, on demande à l'uilisateur d'entrer un tier
 var entree = ""
-var liste_pkmn : seq[Pokemon] # Liste des pokémons d'un même tier
 var nombre = 0 # Nombre de pokémons à tirer
 while not (entree =~ re"[q|Q]"):
+  
   stdout.write prompt_tier
   entree = readLine(stdin)
-  # On essaie de récupérer la liste des pokémons du tier choisi, si erreur => l'entrée est incorrecte, on continue
-  try:
-    liste_pkmn = map_pkdx[entree]
-  except:
-    # Histoire de ne pas afficher d'erreur lorsqu'on quitte
-    if not(entree =~ re"[q|Q]"):
-      log(LogType.Error, &"Tier inconnu : {entree}")
-    continue
+  
+  # On essaie de récupérer la liste des pokémons du tier choisi, si len liste == 0, on reboucle
+  let liste_pkmn = pokedex.filter((p) => p.tier == entree)
+  if liste_pkmn.len == 0:
+    if not (entree =~ re"[q|Q]"):
+      log(LogType.Error, &"Erreur, le tier {entree} n'existe pas")
+    continue  
+
   # On demande un nombre (réaliste de 1 à taille de la liste)
-  while (nombre <= 0) or (nombre >= liste_pkmn.len):
-    stdout.write(prompt_nb)
-    try:
-      # var temporaire pour stocker l'entrée utilisateur
-      let nb = readline(stdin)
-      discard parseint(nb, nombre)
-    except:
-      log(LogType.Error, &"Nombre invalide, il doit être entre 1 et {liste_pkmn.len}")
-  # On a le bon nombre, on va récupérer X pokémons de la liste, et les afficher
+  while not (nombre in 1..liste_pkmn.len):
+    stdout.write(&"Entrez le nombre de Pokémons à récupérer (entre 1 et {liste_pkmn.len - 1})\n=> ")
+    # var temporaire pour stocker l'entrée utilisateur
+    let nb = readline(stdin)
+    discard parseint(nb, nombre)
+  
+  # On a le bon nombre, on va récupérer X pokémons du tier demande, et les afficher
   for e in liste_pkmn.recupRand(nombre):
     echo &"{e.nom}"
 
