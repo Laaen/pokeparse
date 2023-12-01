@@ -1,0 +1,148 @@
+<html lang="fr-FR">
+<head>
+    <title>Pokeparse</title>
+    <script src="/neel.js"></script>
+</head>
+<body onload="setup_list()">
+    <script src="/js/main.js"></script>
+    <div id="main">
+        <div id="div_gauche">
+            <div id="div_select">
+                <!--<input type="checkbox" id="check_tier" onChange="actSelect(this, 'tiers')">-->
+                <fieldset>
+                    <legend> Tier </legend>
+                    <select id="tiers" multiple>
+                    </select>
+                </fieldset>
+            </div>
+            <!--<div id="div_select">
+                <input type="checkbox" id="check_type_1" onChange="actSelect(this, 'types_1')">
+                <span> Type : </span>
+                <select id="types_1" onChange="combo_type_1()" disabled>
+                    OPTIONS_TYPE_1
+                </select>
+            </div>
+            <div id="div_select">
+                <input type="checkbox" id="check_type_2" onChange="actSelect(this, 'types_2')">
+                <span> Type : </span>
+                <select id="types_2" onChange="combo_type_2()" disabled>
+                    OPTIONS_TYPE_2
+                </select>
+            </div>-->
+            <input id="nombre" type="number" min="1" max="1000" step="1" value="1">
+            <button id="exec" onclick='show_random_pokemons()'> Go !</button>
+        </div>
+        <div id="div_droite" class="scroller">
+            
+        </div>
+    </div>
+    <script>
+        <!--
+        function actSelect(btn, id){
+            elt = document.getElementById(id)
+            if (btn.checked){
+                elt.removeAttribute("disabled", "")
+            }else{
+                elt.setAttribute("disabled", "")
+            }  
+        };
+        -->
+        
+        function show_random_pokemons(){
+            options = document.getElementById("tiers").selectedOptions
+            let values = Array.from(options).map(({ value }) => value);
+            let res = JSON.stringify({number : document.getElementById("nombre").value, tiers : values})
+            let pokemons = get_pokemons(res)
+        };
+        
+    </script>
+    
+    <style>
+        
+        html{
+            height: 95%;
+        }
+        
+        body{
+            background: #2a2a2a;
+            height: 100%;
+        }
+        
+        #main{
+            display: flex;
+            flex-direction: row;
+            height: 100%;
+        }
+        
+        #div_droite{
+            padding: 5px;
+            height: 100%;
+            width: 60%;
+            border-radius: 5px;
+            background: #48484b;
+        }
+        
+        #div_gauche{
+            display: flex;
+            padding: 5px;
+            flex-direction: column;
+            width: 40%;
+            height: 100%;
+        }
+    
+        #div_select{
+            padding: 5px;
+            height: 90%;
+        }
+        
+        fieldset{
+            height: 100%;
+        }
+        
+        #tiers{
+            width: 100%;
+            height: 100%;
+        }
+        
+        span {
+            color: white;
+            font-size: 1.5rem;
+        }
+    
+        select {
+            font-size: 1.2rem;
+        }
+        
+        p, legend {
+            color: white;
+            margin: 0px;
+            font-size: 1.2rem;
+        }
+        
+        #nombre{
+            margin-top: 25px;
+            margin-bottom: 10px;
+            width: 40%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .scroller {
+            width: 300px;
+            overflow-y: scroll;
+            scrollbar-color: rebeccapurple green;
+            scrollbar-width: thin;
+        }
+        
+        #nombre{
+            font-size: 1.2em;
+        }
+        
+        button{
+            font-size: 1.2em;
+        }
+        
+    </style>
+    
+</body>
+</html>

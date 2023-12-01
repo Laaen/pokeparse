@@ -4,23 +4,13 @@ import std/tables
 import std/strutils
 import std/sequtils
 import std/httpclient
-import std/terminal
-import std/re
-import std/enumutils
 import std/strformat
 import std/parseutils
 import std/random
 import std/unicode
-
-# Couleurs pour les types de pokemons
-type
-  TypeColor = enum
-    Flying = ("blue")
-
-type
-  LogType = enum
-    Error
-    Info
+import neel
+import flatty
+import std/algorithm
 
 type
   RecupError = object of CatchableError
@@ -34,18 +24,13 @@ type
 proc tier* (p : Pokemon) : string = p.tier
 proc nom* (p : Pokemon) : string = p.nom
 proc types* (p: Pokemon) : seq[string] = p.types
-proc repr (p: Pokemon) : string = 
-  &"{p.nom.toLower.capitalize} | Type(s) : {p.types.join(sep = \" \")}"
+proc repr (p: Pokemon) : string = &"{p.nom.toLower.capitalize} | Type(s) : {p.types.join(sep = \" \")}"
 
+proc box[T](x: T): ref T =
+  new(result); result[] = x
 
 proc getV(h : JsonNode, k : string) : string =
   return h[k].getSTr().toUpper()
-
-proc log(l_type : LogType, contenu : string) = 
-  ## Permet de logger des infos ou erreurs
-  case l_type
-    of LogType.Error: stdout.styledWriteLine(fgRed, contenu & "\n")
-    of LogType.Info : stdout.styledWriteLine(fgYellow, contenu & "\n")
 
 proc getPkdx() : auto = 
   ## Retreives the json, parses it and returns a seq of Pokemon objects 
@@ -68,62 +53,73 @@ proc getPkdx() : auto =
         let types = collect:
           for elt in items(parsed_content[e]["types"]):
             elt.getStr()
-        Pokemon(nom : parsed_content[e].getV("name"), tier : parsed_content[e].getV("tier"), types : types)
+        Pokemon(nom : parsed_content[e].getV("name"), tier : parsed_content[e].getV("tier").toLower, types : types)
 
-proc recupRand(liste_pk : openArray[Pokemon], nombre : int): auto = 
-  ## Retourne un openAr ray de nombre pokémons choisis au hasard dans la liste liste_pk
-  result = collect:
-    for i in 1..nombre: 
-       liste_pk.sample()
+proc loadPkdx(): seq[Pokemon] = 
+  ## Génère une liste de pokemons à partir du fichier
+  let file = open("pokedex", fmRead)
+  result = fromFlatty(file.readAll, seq[Pokemon])
+  file.close()
+
+proc generateRes(p_list : seq[Pokemon]) : string =
+  ## Génère un string de <p> 
+  for e in p_list:
+    result.add(&"<p>{e.repr}</p>\n")
+  return result
+
+proc generateOpt(a : seq[Pokemon]) : string =
+  ## Retourne les tiers sous forme d'options à injecter dans la page html
+  var tiers = collect:
+    for elt in a:
+      elt.tier.toUpper
+  tiers = tiers.deduplicate().sorted
+
+  for elt in tiers:
+    result.add(&"<option>{elt}</option>\n")
+  return result
+
+proc recupRand(nombre : int, liste_tier : ref seq[string]): seq[Pokemon] = 
+  ## Retourne un openArray de nombre pokémons choisis au hasard dans un tier donné
+  
+  # Liste filtrée, on a retiré les pokémons des tiers non selectionnés
+  var filtered_list = loadPkdx().filter(p => p.tier in liste_tier[])
+
+  # On vérifie que le nombre est bien inférieur à la taille max
+  var maxi = nombre
+  if nombre > filtered_list.len:
+    maxi = filtered_list.len
+
+  for i in 1..maxi: 
+    result.add(filtered_list.sample)
+    filtered_list.delete(filtered_list.find(result[^1]))
 
 ##################################
 # Boucle principale du programme #
 ##################################
 
-const splash = """  _____      _        _____                    
- |  __ \    | |      |  __ \                   
- | |__) |__ | | _____| |__) |_ _ _ __ ___  ___ 
- |  ___/ _ \| |/ / _ \  ___/ _` | '__/ __|/ _ \
- | |  | (_) |   <  __/ |  | (_| | |  \__ \  __/
- |_|   \___/|_|\_\___|_|   \__,_|_|  |___/\___|
-                                               
-                                               """
-const prompt_tier = """Entrez un tier (Illegal, LC, NFE, PU, (PU), RU, OU, NUBL, UU, PUBL, NU, RUBL, Uber, UUBL, AG,CAP LC, CAP, CAP NFE) (q pour quitter) 
-=>  """
-
-# On affiche quelques infos
-echo splash
-# On charge la loste de pokemons
+# Mise à jour du fichier pokedex
 let pokedex = getPkdx()
+let file = open("pokedex", fmWrite)
+file.write(toFlatty(pokedex))
+file.close()
 
-# Boucle, on demande à l'uilisateur d'entrer un tier
-var entree = ""
-var nombre = 0 # Nombre de pokémons à tirer
-while not (entree =~ re"[q|Q]"):
-  
-  stdout.write prompt_tier
-  entree = readLine(stdin).toUpper()
-  
-  # On essaie de récupérer la liste des pokémons du tier choisi, si len liste == 0, on reboucle
-  let liste_pkmn = pokedex.filter((p) => p.tier == entree)
-  if liste_pkmn.len == 0:
-    if not (entree =~ re"[q|Q]"):
-      log(LogType.Error, &"Erreur, le tier {entree} n'existe pas")
-    continue  
+exposeProcs:
+    proc getPokemons(jsMsg: string) =
+        ## Gets "number" pokemons of the given Tier List
+        # Parse the params
+        let params = parseJson(jsMsg)
+        let tiers = params["tiers"].getElems.map(e => e.getStr.toLower)
+        var nb : int
+        discard params["number"].getStr.parseInt(nb)
+        # Get the pokemons list
+        callJs("inject_res", generateRes(recupRand(nb, box(tiers))))
+    
+    proc setupListBox() =
+      ## Injecte les tiers dans la listbox
+      callJs("inject_list", generateOpt(loadPkdx()))
 
-  # On demande un nombre (réaliste de 1 à taille de la liste)
-  while not (nombre in 1..liste_pkmn.len):
-    stdout.write(&"Entrez le nombre de Pokémons à récupérer (entre 1 et {liste_pkmn.len - 1})\n=> ")
-    # var temporaire pour stocker l'entrée utilisateur
-    let nb = readline(stdin)
-    discard parseint(nb, nombre)
-  
-  echo ""
-  # On a le bon nombre, on va récupérer X pokémons du tier demande, et les afficher
-  for e in liste_pkmn.recupRand(nombre):
-    echo e.repr
-  echo ""
 
-  # On reset le nombre et l'entrée
-  nombre = 0
-  entree = ""
+startApp(webDirPath = """C:\Users\laaen\Desktop\pokeparse-nim\assets\""", size= [700,600])
+
+
+
