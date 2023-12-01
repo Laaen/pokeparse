@@ -119,7 +119,7 @@ exposeProcs:
       callJs("inject_list", generateOpt(loadPkdx()))
 
 
-startApp(webDirPath = """C:\Users\laaen\Desktop\pokeparse-nim\assets\""", size= [700,600])
+startApp(webDirPath = currentSourcePath.parentDir / "assets", size= [700,600])
 
 
 
